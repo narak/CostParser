@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cost Parser</title>
+    <style>
+        html, body {
+            height: 100%;
+            font-size: 1rem;
+            font-family: monospace;
+            color: #2f2b2c;
+            margin: 0;
+        }
+        body {
+            padding: 0;
+        }
+        #header {
+            color: #fff;
+            float: none;
+            margin: 0;
+            padding: 0;
+            background-color: #ee8800;
+            overflow: hidden;
+        }
+        #header h1, #header div {
+            float: left;
+            margin: 0;
+            margin-left: 20px;
+            padding: 10px 0;
+        }
+        textarea {
+            float: left;
+            width: 350px;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        textarea::-webkit-input-placeholder::after {
+            content:"\A\A Format\A #dd-mm-yyyy\A Amount1 Category1.Sub Category1 Spender1\A Amount2 Category2.Sub Category2 Spender2\A etc...";
+        }
+        small {
+            font-size: 1rem;
+            font-weight: 300;
+        }
+        div {
+            margin-left: 20px;
+            float: left;
+            margin-bottom: 20px;
+        }
+        .clear-left {
+            clear: left;
+        }
+        table {
+            float: left;
+            margin-right: 20px;
+        }
+        td, th {
+            padding: 3px 8px;
+        }
+        td.number {
+            text-align: right;
+        }
+        table tr:nth-child(even) {
+            background-color: #eee;
+        }
+        table th {
+            background-color: #2f2b2c;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+<div id="header">
+    <h1>Cost Parser</h1>
+    <div>
+        <strong>Format:</strong><br>
+        #dd-mm-yyyy<br>
+        Amount1 Category1.Sub Category1 Spender1<br>
+        Amount2 Category2.Sub Category2 Spender2<br>
+        etc...
+    </div>
+</div>
+<textarea id="cost-text" placeholder="Enter cost text here..."></textarea>
+<div>
+    <h4><strong>Total Amount:</strong> <span id="total-amount"></span></h4>
+    <table id="category-wise">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <table id="person-wise">
+        <thead>
+            <tr>
+                <th>Person</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <table id="day-wise">
+        <thead>
+            <tr>
+                <th>Day</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+<table class="clear-left" id="detail-parsed">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Sub Category</th>
+            <th>Spender</th>
+            <th>Amount</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+// @see IIFE
+(function(undefined) {
+    'use strict';
+
+    var dayArray = ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat'],
+        elCostText = document.getElementById('cost-text'),
+        elDetail = document.querySelector('#detail-parsed tbody'),
+        elCatWise = document.querySelector('#category-wise tbody'),
+        elPersonWise = document.querySelector('#person-wise tbody'),
+        elDayWise = document.querySelector('#day-wise tbody'),
+        elTotalAmount = document.getElementById('total-amount'),
+        costText = elCostText.value,
+        parsed, catAmount, subCatAmount, spendAmount, totalAmount, dayAmount,
+        parseCost = function() {
+            var costLines, line, lineBits, lineParsed, date, day;
+
+            // Split cost text into lines.
+            costLines = costText.split(/\n|\r/);
+
+            // Reset all values everytime text is parsed.
+            parsed = [];
+            catAmount = {};
+            subCatAmount = {};
+            spendAmount = {};
+            dayAmount = {};
+            totalAmount = 0;
+            date = new Date();
+
+            costLines.forEach(function(line) {
+                // Date line.
+                if (line.charAt(0) === '#') {
+                    lineBits = line.substring(1).split('-');
+                    date.setDate(Number(lineBits[0]));
+                    date.setMonth(Number(lineBits[1])-1);
+                    if (lineBits[2]) {
+                        if (lineBits[2].length < 4) {
+                            alert('Error parsing date. Year should be a 4 digit number if present.');
+                        } else {
+                            date.setYear(Number(lineBits[2]));
+                        }
+                    }
+                    day = date.getDay();
+                // Cost line.
+                } else {
+                    if (line.length < 5) return;
+                    lineBits = line.split(/\s+|\./);
+
+                    lineParsed = {};
+                    if (date) {
+                        lineParsed.date = date;
+                    }
+                    lineParsed.amount = Number(lineBits[0]);
+                    lineParsed.category = lineBits[1];
+                    // Greater than 3 means there is a subcategory.
+                    if (lineBits.length > 3) {
+                        // Get all lineBits except last one(spender) to account for spaces
+                        // in subcategory and concat using space.
+                        lineParsed.subCategory = lineBits.slice(2, lineBits.length - 1).join(' ');
+                        // Get spender.
+                        lineParsed.spender = lineBits[lineBits.length - 1];
+                    } else {
+                        lineParsed.spender = lineBits[2];
+                    }
+
+                    totalAmount += lineParsed.amount;
+                    parsed.push(lineParsed);
+
+                    if (date) {
+                        if (!dayAmount[day]) dayAmount[day] = 0;
+                        dayAmount[day] += lineParsed.amount;
+                    }
+
+                    if (!catAmount[lineParsed.category])
+                        catAmount[lineParsed.category] = 0;
+                    catAmount[lineParsed.category] += lineParsed.amount;
+
+                    if (!subCatAmount[lineParsed.subCategory])
+                        subCatAmount[lineParsed.subCategory] = 0;
+                    subCatAmount[lineParsed.subCategory] += lineParsed.amount;
+
+                    if (!spendAmount[lineParsed.spender])
+                        spendAmount[lineParsed.spender] = 0;
+                    spendAmount[lineParsed.spender] += lineParsed.amount;
+                }
+            });
+            render();
+        },
+        render = function() {
+            // Frag for ze performanzes. Not like it matters here, but we is
+            // environmently frandly peepulz.
+            var frag = document.createDocumentFragment(),
+                tr, td;
+
+            elTotalAmount.innerText = totalAmount;
+
+            // Detail display.
+            parsed.forEach(function(rec) {
+                tr = document.createElement('tr');
+
+                td = document.createElement('td');
+                td.innerText = rec.category;
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = rec.subCategory || '';
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = rec.spender;
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = rec.amount;
+                td.classList.add('number');
+                tr.appendChild(td);
+
+                frag.appendChild(tr);
+            });
+            elDetail.innerHTML = '';
+            elDetail.appendChild(frag);
+
+            // Category wise display.
+            frag = document.createDocumentFragment();
+            for (var catKey in catAmount) {
+                tr = document.createElement('tr');
+
+                td = document.createElement('td');
+                td.innerText = catKey;
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = catAmount[catKey];
+                tr.appendChild(td);
+                frag.appendChild(tr);
+            }
+            elCatWise.innerHTML = '';
+            elCatWise.appendChild(frag);
+
+            // Person wise display.
+            frag = document.createDocumentFragment();
+            for (var personKey in spendAmount) {
+                tr = document.createElement('tr');
+
+                td = document.createElement('td');
+                td.innerText = personKey;
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = spendAmount[personKey];
+                tr.appendChild(td);
+                frag.appendChild(tr);
+            }
+            elPersonWise.innerHTML = '';
+            elPersonWise.appendChild(frag);
+
+            // Day wise display.
+            frag = document.createDocumentFragment();
+            for (var dayKey in dayAmount) {
+                tr = document.createElement('tr');
+
+                td = document.createElement('td');
+                td.innerText = dayArray[dayKey];
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = dayAmount[dayKey];
+                tr.appendChild(td);
+                frag.appendChild(tr);
+            }
+            elDayWise.innerHTML = '';
+            elDayWise.appendChild(frag);
+        };
+
+    // Initial parse.
+    parseCost();
+
+    // Parse on change text.
+    elCostText.addEventListener('keyup', function() {
+        // Process only if the cost text has changed.
+        if (this.value !== costText) {
+            costText = this.value;
+            parseCost();
+        }
+    });
+
+    //Debug
+    window.parsedData = parsed;
+})(window, document);
+</script>
+</body>
+</html>
